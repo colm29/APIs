@@ -6,6 +6,7 @@ from sqlalchemy.orm import relationship, sessionmaker
 from sqlalchemy import create_engine
 
 import sys
+import codecs
 
 import config
 
@@ -29,39 +30,51 @@ app = Flask(__name__)
 
 @app.route('/restaurants', methods=['GET', 'POST'])
 def all_restaurants_handler():
-    if request.method == 'POST':
-        resto = findARestaurant(
-            request.args.get('mealType', ''), request.args.get('location', ''))
-        resto_for_db = Restaurant(restaurant_name=resto['name'],
-                                  restaurant_image=resto['image'], restaurant_address=resto['address'])
-        session.add(resto_for_db)
-        session.commit()
-        resto = session.query(Restaurant).query(
-            restaurant_name=resto['name']).one()
-        return jsonify(Restaurant=resto.serialize)
-    else:
-        restos = session.Query(Restaurant).all()
-        return jsonify(Restaurants=[r.serialize for r in restos])
+    if request.method == 'GET':
+        # RETURN ALL RESTAURANTS IN DATABASE
+        restaurants = session.query(Restaurant).all()
+        return jsonify(restaurants=[i.serialize for i in restaurants])
+
+    elif request.method == 'POST':
+        # MAKE A NEW RESTAURANT AND STORE IT IN DATABASE
+        location = request.args.get('location', '')
+        mealType = request.args.get('mealType', '')
+        restaurant_info = findARestaurant(mealType, location)
+        if restaurant_info != "No Restaurants Found":
+            restaurant = Restaurant(
+                restaurant_name=restaurant_info['name'], restaurant_address=restaurant_info['address'], restaurant_image=restaurant_info['image'])
+            session.add(restaurant)
+            session.commit()
+            return jsonify(restaurant=restaurant.serialize)
+        else:
+            return jsonify({"error": "No Restaurants Found for %s in %s" % (mealType, location)})
 
 
 @app.route('/restaurants/<int:id>', methods=['GET', 'PUT', 'DELETE'])
 def restaurant_handler(id):
-    resto = session.query(Restaurant).query(id=id).one()
-    if request.method == 'DELETE':
-        session.delete(resto)
+    restaurant = session.query(Restaurant).filter_by(id=id).one()
+    if request.method == 'GET':
+        # RETURN A SPECIFIC RESTAURANT
+        return jsonify(restaurant=restaurant.serialize)
+    elif request.method == 'PUT':
+        # UPDATE A SPECIFIC RESTAURANT
+        address = request.args.get('address')
+        image = request.args.get('image')
+        name = request.args.get('name')
+        if address:
+            restaurant.restaurant_address = address
+        if image:
+            restaurant.restaurant_image = image
+        if name:
+            restaurant.restaurant_name = name
         session.commit()
-        restos = session.Query(Restaurant).all()
-        return jsonify(Restaurants=[r.serialize for r in restos])
-    elif request == 'PUT':
-        if request.args.get('name', '') != '':
-            resto.restaurant_name = request.args['name']
-        if request.args.get('address', '') != '':
-            resto.restaurant_address = request.args['address']
-        if request.args.get('image', '') != '':
-            resto.restaurant_address = request.args['image']
-        session.add(resto)
+        return jsonify(restaurant=restaurant.serialize)
+
+    elif request.method == 'DELETE':
+        # DELETE A SPECFIC RESTAURANT
+        session.delete(restaurant)
         session.commit()
-    return jsonify(Restaurant=resto.serialize)
+        return "Restaurant Deleted"
 
 
 if __name__ == '__main__':
